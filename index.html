@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wacky Tube Battle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #111; color: white; overflow-x: hidden; }
+        
+        .wacky-text {
+            display: inline-block;
+            animation: wobble 2s infinite ease-in-out;
+        }
+        @keyframes wobble {
+            0%, 100% { transform: rotate(-2deg); }
+            50% { transform: rotate(2deg); }
+        }
+        
+        .tube-gradient {
+            background: linear-gradient(90deg, #0088ff, #ff4444);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        #bg-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.4; /* Subtle background effect */
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen relative">
+
+    <!-- The Dancing Tube Man Canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Main Content -->
+    <main class="flex-grow flex flex-col items-center justify-center text-center px-4 relative z-10">
+        
+        <!-- Glowing Orbs (Static decoration) -->
+        <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+            <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-500 rounded-full mix-blend-screen filter blur-3xl animate-pulse"></div>
+            <div class="absolute bottom-1/4 right-1/4 w-64 h-64 bg-red-500 rounded-full mix-blend-screen filter blur-3xl animate-pulse" style="animation-delay: 1s;"></div>
+        </div>
+
+        <div class="max-w-4xl mx-auto mt-10">
+            <p class="text-sm uppercase tracking-[0.3em] text-gray-400 mb-4">Physics Chaos Engine v1.0</p>
+            
+            <h1 class="text-6xl md:text-8xl font-black mb-6 leading-tight">
+                WACKY <br>
+                <span class="tube-gradient wacky-text">TUBE BATTLE</span>
+            </h1>
+
+            <p class="text-xl text-gray-300 mb-10 max-w-lg mx-auto leading-relaxed">
+                A chaotic fighting game built on a custom <strong>Verlet Integration</strong> physics engine. 
+                Zero dependencies. 100% pure JavaScript.
+            </p>
+
+            <a href="app.html" class="group relative inline-flex items-center justify-center px-8 py-4 font-black text-white transition-all duration-200 bg-yellow-500 border-4 border-black rounded-lg hover:translate-y-1 active:translate-y-2 shadow-[6px_6px_0px_rgba(255,255,255,0.2)] hover:shadow-none focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                <span class="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-black"></span>
+                <span class="relative text-xl text-black uppercase tracking-widest">Launch Game</span>
+            </a>
+        </div>
+
+        <!-- Feature Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mt-20 max-w-5xl w-full text-left">
+            <div class="p-6 border border-gray-800 rounded-xl bg-gray-900/80 backdrop-blur-sm shadow-xl">
+                <div class="text-blue-400 text-2xl mb-3">⚡</div>
+                <h3 class="font-bold text-lg mb-2 text-white">Zero Dependencies</h3>
+                <p class="text-gray-400 text-sm">No Phaser, no Three.js. Just raw math and the HTML5 Canvas API running at 60fps.</p>
+            </div>
+            <div class="p-6 border border-gray-800 rounded-xl bg-gray-900/80 backdrop-blur-sm shadow-xl">
+                <div class="text-red-400 text-2xl mb-3">🌊</div>
+                <h3 class="font-bold text-lg mb-2 text-white">Verlet Physics</h3>
+                <p class="text-gray-400 text-sm">Custom constraint solver simulating fabric tension, wind resistance, and centrifugal force.</p>
+            </div>
+            <div class="p-6 border border-gray-800 rounded-xl bg-gray-900/80 backdrop-blur-sm shadow-xl">
+                <div class="text-yellow-400 text-2xl mb-3">📱</div>
+                <h3 class="font-bold text-lg mb-2 text-white">Touch Native</h3>
+                <p class="text-gray-400 text-sm">Designed for glass. Analog wind control allows for precise leaning and momentum building.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="py-6 text-center text-gray-600 text-xs uppercase tracking-widest relative z-10">
+        Built with Vibe Coding • <a href="https://github.com/yourusername" class="hover:text-white transition-colors">View Source</a>
+    </footer>
+
+    <!-- ANIMATION SCRIPT -->
+    <script>
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+
+        // --- SIMPLIFIED PHYSICS ENGINE ---
+        // (Stripped down version of the game engine for visual effect)
+        
+        const CONFIG = {
+            gravity: 0.3,
+            friction: 0.92,
+            spineCount: 14,
+            spineSpacing: 25,
+            armLength: 8,
+            armSpacing: 18
+        };
+
+        class Point {
+            constructor(x, y, locked = false) {
+                this.x = x; this.y = y;
+                this.oldx = x; this.oldy = y;
+                this.locked = locked;
+            }
+            update() {
+                if (this.locked) return;
+                let vx = (this.x - this.oldx) * CONFIG.friction;
+                let vy = (this.y - this.oldy) * CONFIG.friction;
+                this.oldx = this.x; this.oldy = this.y;
+                this.y += CONFIG.gravity; // Gravity
+                this.y -= 2.0; // Constant Lift for background vibe
+                this.x += vx; this.y += vy;
+            }
+        }
+
+        class Stick {
+            constructor(p1, p2, length) {
+                this.p1 = p1; this.p2 = p2; this.length = length;
+            }
+            update() {
+                const dx = this.p2.x - this.p1.x;
+                const dy = this.p2.y - this.p1.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist===0) return;
+                const diff = this.length - dist;
+                const percent = diff/dist/2;
+                const offsetX = dx * percent; 
+                const offsetY = dy * percent;
+                if(!this.p1.locked) { this.p1.x -= offsetX; this.p1.y -= offsetY; }
+                if(!this.p2.locked) { this.p2.x += offsetX; this.p2.y += offsetY; }
+            }
+        }
+
+        // --- TUBE MAN SETUP ---
+        let points = [];
+        let sticks = [];
+        let frameCount = 0;
+
+        function initTube() {
+            points = [];
+            sticks = [];
+            // Position him on the right side or center depending on screen
+            const startX = width > 768 ? width * 0.8 : width * 0.5;
+            const startY = height + 50; // Just off screen bottom
+
+            // Spine
+            for(let i=0; i<CONFIG.spineCount; i++) {
+                const p = new Point(startX, startY - (i*CONFIG.spineSpacing), i===0);
+                points.push(p);
+                if(i>0) sticks.push(new Stick(points[i-1], points[i], CONFIG.spineSpacing));
+            }
+            
+            // Arms
+            const neck = points[points.length-2];
+            let prev = neck;
+            // Left Arm
+            for(let i=0; i<CONFIG.armLength; i++) {
+                const p = new Point(startX-30, neck.y + (i*10));
+                points.push(p);
+                const len = i===0 ? 10 : CONFIG.armSpacing;
+                sticks.push(new Stick(prev, p, len));
+                prev = p;
+            }
+            prev = neck;
+            // Right Arm
+            for(let i=0; i<CONFIG.armLength; i++) {
+                const p = new Point(startX+30, neck.y + (i*10));
+                points.push(p);
+                const len = i===0 ? 10 : CONFIG.armSpacing;
+                sticks.push(new Stick(prev, p, len));
+                prev = p;
+            }
+        }
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            initTube();
+        }
+
+        function animate() {
+            ctx.clearRect(0,0,width,height);
+            frameCount++;
+
+            // AUTOMATIC DANCING LOGIC
+            // Generate a smooth sine wave for "Wind"
+            const autoWind = Math.sin(frameCount * 0.03) * 1.5; 
+            
+            // Apply Wind to Spine
+            for(let i=1; i<CONFIG.spineCount; i++) {
+                let leverage = 1 + (i/CONFIG.spineCount);
+                points[i].x += autoWind * leverage;
+                // Add some chaotic noise
+                points[i].x += Math.sin(frameCount * 0.1 + i) * 0.2;
+            }
+
+            // Update Physics
+            points.forEach(p => p.update());
+            for(let i=0; i<4; i++) sticks.forEach(s => s.update());
+
+            // DRAW
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // Create Gradient Stroke
+            const gradient = ctx.createLinearGradient(0, height-400, width, height);
+            gradient.addColorStop(0, '#0088ff');
+            gradient.addColorStop(1, '#ff4444');
+            ctx.strokeStyle = gradient;
+
+            // Draw Spine
+            ctx.lineWidth = 40;
+            ctx.beginPath();
+            if(points.length>0) {
+                ctx.moveTo(points[0].x, points[0].y);
+                for(let i=1; i<CONFIG.spineCount; i++) ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.stroke();
+
+            // Draw Arms (Using indices)
+            ctx.lineWidth = 18;
+            const spineEnd = CONFIG.spineCount;
+            const neck = points[CONFIG.spineCount-2];
+            
+            // Left
+            ctx.beginPath();
+            ctx.moveTo(neck.x, neck.y);
+            for(let i=0; i<CONFIG.armLength; i++) ctx.lineTo(points[spineEnd+i].x, points[spineEnd+i].y);
+            ctx.stroke();
+
+            // Right
+            ctx.beginPath();
+            ctx.moveTo(neck.x, neck.y);
+            for(let i=0; i<CONFIG.armLength; i++) ctx.lineTo(points[spineEnd+CONFIG.armLength+i].x, points[spineEnd+CONFIG.armLength+i].y);
+            ctx.stroke();
+
+            // Head (Simple Circle)
+            const head = points[CONFIG.spineCount-1];
+            ctx.fillStyle = '#111'; // Match bg
+            ctx.beginPath();
+            ctx.arc(head.x, head.y, 28, 0, Math.PI*2);
+            ctx.fill();
+            ctx.stroke(); // Outline only
+
+            // Face (White lines)
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(head.x-10, head.y-5, 8, 0, Math.PI*2); // Eye L
+            ctx.arc(head.x+10, head.y-5, 8, 0, Math.PI*2); // Eye R
+            ctx.fill();
+            
+            // Mouth
+            ctx.beginPath();
+            ctx.arc(head.x, head.y+15, 6, 0, Math.PI*2);
+            ctx.fill();
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+        animate();
+
+    </script>
+</body>
+</html>
+
+
