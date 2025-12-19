@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wacky Tube Battle</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #333;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* Prevents scrolling/zooming */
+            user-select: none; /* Prevents text selection */
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+
+        /* UI OVERLAY WRAPPER */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* Let touches pass through to input layer */
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* HUD */
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .health-box {
+            width: 42%;
+            display: flex;
+            flex-direction: column;
+        }
+        .health-bar-container {
+            width: 100%;
+            height: 24px;
+            background: #222;
+            border: 3px solid #000;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+        }
+        .health-fill {
+            height: 100%;
+            width: 100%;
+            transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #hp-player { background: linear-gradient(90deg, #0088ff, #44aaff); }
+        #hp-enemy { background: linear-gradient(90deg, #ff4444, #ff8888); }
+        .name-tag {
+            color: white;
+            font-weight: 900;
+            font-size: 1.1rem;
+            text-shadow: 2px 2px 0 #000;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* SCREENS (Start, Win, Loss) */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto; /* Catch clicks */
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            pointer-events: none; /* Default hidden */
+        }
+        .screen.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        h1 { 
+            color: white; font-size: 3.5rem; margin: 0 0 15px 0; 
+            text-transform: uppercase; text-align: center; line-height: 0.9; 
+            text-shadow: 5px 5px 0 #000; letter-spacing: -2px;
+            font-style: italic;
+        }
+        h2 { 
+            color: #ddd; font-size: 1.4rem; margin-bottom: 40px; 
+            text-align: center; text-transform: uppercase; letter-spacing: 2px;
+            border-bottom: 2px solid #ffcc00; padding-bottom: 10px;
+        }
+        p { 
+            color: #bbb; max-width: 80%; text-align: center; 
+            line-height: 1.6; margin-bottom: 40px; font-size: 1.1rem; 
+        }
+
+        /* BUTTONS */
+        button.btn-main {
+            background: #ffcc00;
+            color: #000;
+            border: 4px solid #000;
+            padding: 20px 50px;
+            font-size: 1.4rem;
+            font-weight: 900;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 8px 8px 0 #000;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        button.btn-main:active { 
+            transform: translate(4px, 4px); 
+            box-shadow: 4px 4px 0 #000; 
+        }
+
+        /* TOUCH INPUT ZONES (Invisible) */
+        #input-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            z-index: 10;
+        }
+        .touch-zone { width: 50%; height: 100%; }
+
+        /* WIND GAUGES */
+        #wind-gauges {
+            position: absolute;
+            bottom: 30px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            opacity: 0.7;
+        }
+        .gauge {
+            width: 120px;
+            height: 10px;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .gauge-fill {
+            height: 100%;
+            background: #fff;
+            width: 0%;
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        /* DAMAGE FLASH FX */
+        #damage-flash {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 30;
+            mix-blend-mode: overlay;
+        }
+    </style>
+</head>
+<body>
+
+<!-- INPUT LAYER -->
+<div id="input-layer">
+    <div id="zone-left" class="touch-zone"></div>
+    <div id="zone-right" class="touch-zone"></div>
+</div>
+
+<!-- GAME CANVAS -->
+<canvas id="gameCanvas"></canvas>
+
+<!-- FLASH FX -->
+<div id="damage-flash"></div>
+
+<!-- UI LAYER -->
+<div id="ui-layer">
+    
+    <!-- HUD -->
+    <div id="hud">
+        <div class="health-box">
+            <div class="name-tag">YOU</div>
+            <div class="health-bar-container"><div id="hp-player" class="health-fill"></div></div>
+        </div>
+        <div class="health-box" style="align-items: flex-end;">
+            <div class="name-tag" id="enemy-name">ENEMY</div>
+            <div class="health-bar-container"><div id="hp-enemy" class="health-fill"></div></div>
+        </div>
+    </div>
+
+    <!-- WIND FEEDBACK -->
+    <div id="wind-gauges">
+        <div class="gauge"><div id="gauge-l" class="gauge-fill"></div></div>
+        <div class="gauge"><div id="gauge-r" class="gauge-fill"></div></div>
+    </div>
+
+    <!-- SCREEN: START -->
+    <div id="screen-start" class="screen visible">
+        <h1>Wacky<br>Tube Battle</h1>
+        <h2>Physics Chaos Championship</h2>
+        <p>Hold Left/Right to ramp up your fans.<br>Use Touch or Arrow Keys/WASD.<br>Hit the head for critical damage.</p>
+        <button class="btn-main" onclick="startGame()">Start Career</button>
+    </div>
+
+    <!-- SCREEN: LEVEL INTRO -->
+    <div id="screen-level" class="screen">
+        <h1 id="level-title">Level 1</h1>
+        <h2 id="level-subtitle">Vs. Training Dummy</h2>
+        <button class="btn-main" onclick="startLevel()">FIGHT!</button>
+    </div>
+
+    <!-- SCREEN: GAME OVER -->
+    <div id="screen-gameover" class="screen">
+        <h1 style="color: #ff5555;">DEFLATED</h1>
+        <p>Your tube has lost its air.</p>
+        <button class="btn-main" onclick="retryLevel()">Try Again</button>
+    </div>
+
+    <!-- SCREEN: WIN GAME -->
+    <div id="screen-win" class="screen">
+        <h1 style="color: #55ff55;">CHAMPION!</h1>
+        <p>You have conquered the parking lot.<br>The Inflatable God is defeated.</p>
+        <button class="btn-main" onclick="returnToTitle()">Back to Title</button>
+    </div>
+
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- CONFIGURATION ---
+    const CONFIG = {
+        gravity: 0.3,
+        baseLift: 3.0,
+        leanLift: 1.5,     // Allows deep bending for reach
+        inputForce: 4.0,   
+        rampSpeed: 0.02,   
+        friction: 0.90,
+        armGravity: 1.0,
+        armChaos: 2.5,
+        spineCount: 14,
+        spineSpacing: 25,
+        armLength: 8,
+        armSpacing: 18
+    };
+
+    // --- CAMPAIGN DATA ---
+    const LEVELS = [
+        { title: "Level 1", sub: "The Training Dummy", color: "#666666", aiSpeed: 0.01, aiAggro: 0.1, enemyColor: "#aaaaaa", enemyName: "DUMMY" },
+        { title: "Level 2", sub: "The Rookie",         color: "#4a3b3b", aiSpeed: 0.01, aiAggro: 0.3, enemyColor: "#ff8800", enemyName: "ROOKIE" },
+        { title: "Level 3", sub: "Tube Tyson",         color: "#3b4a4a", aiSpeed: 0.015, aiAggro: 0.6, enemyColor: "#cc00cc", enemyName: "TYSON" },
+        { title: "Level 4", sub: "The Wacky Master",   color: "#3b3b4a", aiSpeed: 0.02, aiAggro: 0.8, enemyColor: "#44ff44", enemyName: "MASTER" },
+        { title: "Level 5", sub: "THE INFLATABLE GOD", color: "#220000", aiSpeed: 0.03, aiAggro: 1.0, enemyColor: "#ff0000", enemyName: "GOD" }
+    ];
+
+    // --- GAME STATE ---
+    let gameState = {
+        levelIndex: 0,
+        isRunning: false,
+        width: window.innerWidth,
+        height: window.innerHeight
+    };
+
+    let player, enemy;
+    let inputL = false, inputR = false;
+    let frameCount = 0;
+    let particles = [];
+
+    // --- PHYSICS CLASSES ---
+    class Point {
+        constructor(x, y, locked = false, armSide = 0) {
+            this.x = x;
+            this.y = y;
+            this.oldx = x;
+            this.oldy = y;
+            this.locked = locked;
+            this.armSide = armSide; // 0=body, -1=left, 1=right
+            this.id = Math.random() * 100;
+        }
+
+        update(currentLift, frameCount) {
+            if (this.locked) return;
+
+            let vx = (this.x - this.oldx) * CONFIG.friction;
+            let vy = (this.y - this.oldy) * CONFIG.friction;
+
+            this.oldx = this.x;
+            this.oldy = this.y;
+
+            // Forces
+            let g = CONFIG.gravity;
+            if (this.armSide !== 0) g *= CONFIG.armGravity;
+            this.y += g;
+
+            if (this.armSide === 0) {
+                this.y -= currentLift;
+            } else {
+                this.y -= (currentLift * 0.05); 
+            }
+
+            // Chaos
+            const time = frameCount * 0.05;
+            if (this.armSide === 0) {
+                this.x += Math.sin(time + this.id) * 0.1;
+            } else {
+                let noise = 0;
+                if (this.armSide === -1) {
+                    noise = Math.sin(time * 2 + this.id) * CONFIG.armChaos;
+                    this.x -= 0.1; 
+                } else {
+                    noise = Math.cos(time * 1.7 + this.id) * CONFIG.armChaos;
+                    this.x += 0.1;
+                }
+                this.x += noise;
+                this.y += Math.sin(time * 3 + this.id) * (CONFIG.armChaos * 0.5);
+            }
+
+            this.x += vx;
+            this.y += vy;
+
+            // Floor
+            if (this.y > gameState.height) {
+                this.y = gameState.height;
+                this.oldy = this.y + vy * 0.5;
+                let slideFriction = 0.8;
+                this.oldx = this.x - (this.x - this.oldx) * slideFriction;
+            }
+        }
+    }
+
+    class Stick {
+        constructor(p1, p2, length) {
+            this.p1 = p1;
+            this.p2 = p2;
+            this.length = length;
+        }
+
+        update() {
+            const dx = this.p2.x - this.p1.x;
+            const dy = this.p2.y - this.p1.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist === 0) return;
+
+            const diff = this.length - dist;
+            const percent = diff / dist / 2;
+            const offsetX = dx * percent;
+            const offsetY = dy * percent;
+
+            if (!this.p1.locked) {
+                this.p1.x -= offsetX;
+                this.p1.y -= offsetY;
+            }
+            if (!this.p2.locked) {
+                this.p2.x += offsetX;
+                this.p2.y += offsetY;
+            }
+        }
+    }
+
+    class TubeMan {
+        constructor(x, color, isPlayer) {
+            this.xBase = x;
+            this.color = color;
+            this.isPlayer = isPlayer;
+            this.hp = 100;
+            this.points = [];
+            this.sticks = [];
+            this.windLeft = 0;
+            this.windRight = 0;
+            this.aiTimer = 0;
+            this.aiAction = 0;
+            this.createBody();
+        }
+
+        createBody() {
+            const startY = gameState.height - 50;
+            
+            // Spine
+            for (let i = 0; i < CONFIG.spineCount; i++) {
+                const isBase = i === 0;
+                const p = new Point(this.xBase, startY - (i * CONFIG.spineSpacing), isBase, 0);
+                this.points.push(p);
+                if (i > 0) this.sticks.push(new Stick(this.points[i-1], this.points[i], CONFIG.spineSpacing));
+            }
+
+            const neck = this.points[this.points.length - 2]; 
+
+            // Arms
+            let prev = neck;
+            for(let i=0; i<CONFIG.armLength; i++) {
+                const p = new Point(this.xBase - 40, neck.y + (i*10), false, -1); 
+                this.points.push(p);
+                const len = i===0 ? 10 : CONFIG.armSpacing;
+                this.sticks.push(new Stick(prev, p, len));
+                prev = p;
+            }
+            prev = neck;
+            for(let i=0; i<CONFIG.armLength; i++) {
+                const p = new Point(this.xBase + 40, neck.y + (i*10), false, 1);
+                this.points.push(p);
+                const len = i===0 ? 10 : CONFIG.armSpacing;
+                this.sticks.push(new Stick(prev, p, len));
+                prev = p;
+            }
+        }
+
+        update(frameCount, inputL, inputR) {
+            if (this.hp <= 0) return; 
+
+            // Input Ramping
+            if (inputL) {
+                this.windLeft += CONFIG.rampSpeed;
+                if (this.windLeft > CONFIG.inputForce) this.windLeft = CONFIG.inputForce;
+            } else {
+                this.windLeft -= CONFIG.rampSpeed;
+                if (this.windLeft < 0) this.windLeft = 0;
+            }
+            if (inputR) {
+                this.windRight += CONFIG.rampSpeed;
+                if (this.windRight > CONFIG.inputForce) this.windRight = CONFIG.inputForce;
+            } else {
+                this.windRight -= CONFIG.rampSpeed;
+                if (this.windRight < 0) this.windRight = 0;
+            }
+
+            // Lift Interpolation
+            const totalWindRatio = Math.min(1.0, (this.windLeft + this.windRight) / CONFIG.inputForce);
+            const currentLift = this.lerp(CONFIG.baseLift, CONFIG.leanLift, totalWindRatio);
+
+            // Apply Wind
+            if (this.windLeft > 0) {
+                for (let i = 1; i < CONFIG.spineCount; i++) {
+                    let leverage = 1 + (i / CONFIG.spineCount); 
+                    this.points[i].x += this.windLeft * leverage;
+                }
+            }
+            if (this.windRight > 0) {
+                for (let i = 1; i < CONFIG.spineCount; i++) {
+                    let leverage = 1 + (i / CONFIG.spineCount); 
+                    this.points[i].x -= this.windRight * leverage;
+                }
+            }
+
+            this.points.forEach(p => p.update(currentLift, frameCount));
+            for (let i=0; i<5; i++) this.sticks.forEach(s => s.update());
+        }
+
+        updateAI(playerObj, difficulty) {
+            this.aiTimer++;
+            const reactionTime = Math.max(10, 60 - (difficulty.aiSpeed * 1000)); 
+
+            if (this.aiTimer > reactionTime) {
+                this.aiTimer = 0;
+                if (Math.random() < difficulty.aiAggro) {
+                    if (this.points[0].x < playerObj.points[0].x) {
+                        this.aiAction = 2; // Right
+                    } else {
+                        this.aiAction = 1; // Left
+                    }
+                } else {
+                    this.aiAction = 0;
+                }
+            }
+            return { l: this.aiAction === 1, r: this.aiAction === 2 };
+        }
+
+        draw() {
+            const head = this.points[CONFIG.spineCount - 1];
+            
+            // Base
+            ctx.fillStyle = '#222';
+            ctx.fillRect(this.points[0].x - 25, this.points[0].y, 50, 20);
+
+            // Styles
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = this.hp <= 0 ? '#444' : this.color;
+            ctx.globalAlpha = this.hp <= 0 ? 0.6 : 1.0;
+            
+            // Shadow
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetY = 5;
+
+            // Body
+            ctx.lineWidth = 40;
+            ctx.beginPath();
+            ctx.moveTo(this.points[0].x, this.points[0].y);
+            for (let i = 1; i < CONFIG.spineCount; i++) ctx.lineTo(this.points[i].x, this.points[i].y);
+            ctx.stroke();
+
+            // Arms
+            ctx.lineWidth = 18;
+            const spineEnd = CONFIG.spineCount;
+            const armLen = CONFIG.armLength;
+            const neck = this.points[CONFIG.spineCount - 2];
+            
+            ctx.beginPath();
+            ctx.moveTo(neck.x, neck.y);
+            for(let i=0; i<armLen; i++) ctx.lineTo(this.points[spineEnd + i].x, this.points[spineEnd + i].y);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(neck.x, neck.y);
+            for(let i=0; i<armLen; i++) ctx.lineTo(this.points[spineEnd + armLen + i].x, this.points[spineEnd + armLen + i].y);
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent'; // Reset shadow for face
+
+            // Head
+            ctx.fillStyle = this.hp <= 0 ? '#444' : this.color;
+            ctx.beginPath();
+            ctx.arc(head.x, head.y, 30, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(head.x - 12, head.y - 5, 10, 0, Math.PI * 2);
+            ctx.arc(head.x + 12, head.y - 5, 10, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupils
+            ctx.fillStyle = 'black';
+            let pupilX = (head.x - head.oldx) * 2.0;
+            let pupilY = (head.y - head.oldy) * 2.0;
+            pupilX = Math.max(-6, Math.min(6, pupilX));
+            pupilY = Math.max(-6, Math.min(6, pupilY));
+
+            ctx.beginPath();
+            ctx.arc(head.x - 12 + pupilX, head.y - 5 + pupilY, 4, 0, Math.PI * 2);
+            ctx.arc(head.x + 12 + pupilX, head.y - 5 + pupilY, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Mouth
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'black';
+            ctx.beginPath();
+            if (this.hp > 0) {
+                ctx.arc(head.x, head.y + 15, 8, 0, Math.PI * 2);
+            } else {
+                // X X dead
+                ctx.moveTo(head.x - 5, head.y + 10); ctx.lineTo(head.x + 5, head.y + 20);
+                ctx.moveTo(head.x + 5, head.y + 10); ctx.lineTo(head.x - 5, head.y + 20);
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+        }
+
+        lerp(start, end, amt) {
+            return (1 - amt) * start + amt * end;
+        }
+    }
+
+    // --- LOGIC ---
+    function startGame() {
+        document.getElementById('screen-start').classList.remove('visible');
+        gameState.levelIndex = 0;
+        showLevelScreen();
+    }
+
+    function showLevelScreen() {
+        const lvl = LEVELS[gameState.levelIndex];
+        document.getElementById('level-title').innerText = lvl.title;
+        document.getElementById('level-subtitle').innerText = lvl.sub;
+        document.getElementById('screen-level').classList.add('visible');
+        document.body.style.backgroundColor = lvl.color;
+        
+        // Safety: ensure inputs are cleared between levels
+        inputL = false; inputR = false;
+    }
+
+    function startLevel() {
+        document.getElementById('screen-level').classList.remove('visible');
+        
+        const lvl = LEVELS[gameState.levelIndex];
+        const cx = gameState.width / 2;
+        // Spacing: 110 offset * 2 = 220px gap. Very Close.
+        const offset = Math.min(110, gameState.width * 0.12);
+        
+        player = new TubeMan(cx - offset, '#0088ff', true);
+        enemy = new TubeMan(cx + offset, lvl.enemyColor, false);
+        
+        document.getElementById('enemy-name').innerText = lvl.enemyName;
+        updateHealthUI();
+        
+        gameState.isRunning = true;
+        
+        // Small delay to prevent accidental inputs from button click
+        setTimeout(() => { inputL = false; inputR = false; }, 50);
+        
+        loop();
+    }
+
+    function retryLevel() {
+        document.getElementById('screen-gameover').classList.remove('visible');
+        showLevelScreen();
+    }
+
+    function returnToTitle() {
+        document.getElementById('screen-win').classList.remove('visible');
+        document.getElementById('screen-start').classList.add('visible');
+        gameState.isRunning = false;
+        gameState.levelIndex = 0;
+        ctx.clearRect(0, 0, gameState.width, gameState.height);
+    }
+
+    function updateHealthUI() {
+        document.getElementById('hp-player').style.width = player.hp + '%';
+        document.getElementById('hp-enemy').style.width = enemy.hp + '%';
+    }
+
+    function checkCollisions() {
+        if (player.hp <= 0 || enemy.hp <= 0) return;
+        checkHit(player, enemy);
+        checkHit(enemy, player);
+    }
+
+    function checkHit(attacker, victim) {
+        const head = attacker.points[CONFIG.spineCount - 1];
+        const hitPoints = [
+            head, 
+            attacker.points[attacker.points.length-1], 
+            attacker.points[attacker.points.length-1-CONFIG.armLength]
+        ];
+
+        const vHead = victim.points[CONFIG.spineCount - 1];
+        const vChest = victim.points[CONFIG.spineCount - 4];
+
+        for (let pt of hitPoints) {
+            const speed = Math.abs(pt.x - pt.oldx) + Math.abs(pt.y - pt.oldy);
+            
+            if (speed > 3.5) { 
+                const dHead = Math.hypot(pt.x - vHead.x, pt.y - vHead.y);
+                const dChest = Math.hypot(pt.x - vChest.x, pt.y - vChest.y);
+                // Hitbox radius: 55
+                if (dHead < 55 || dChest < 55) {
+                    const dmg = dHead < 55 ? 8 : 4; 
+                    victim.hp -= dmg;
+                    const dir = Math.sign(pt.x - pt.oldx);
+                    applyKnockback(victim, dir * 5.0);
+                    triggerFlash();
+                    spawnParticles(pt.x, pt.y, attacker.color);
+                    pt.oldx = pt.x + (dir * 10); 
+                    updateHealthUI();
+                    if (victim.hp <= 0) handleWinLoss();
+                    return; 
+                }
+            }
+        }
+    }
+
+    function applyKnockback(tube, force) {
+        for (let p of tube.points) {
+            if (!p.locked) { p.x += force; p.oldx -= force * 0.1; }
+        }
+    }
+
+    function triggerFlash() {
+        const flash = document.getElementById('damage-flash');
+        flash.style.opacity = 0.6;
+        setTimeout(() => flash.style.opacity = 0, 50);
+    }
+
+    function spawnParticles(x, y, color) {
+        for(let i=0; i<8; i++) {
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 12,
+                vy: (Math.random() - 0.5) * 12,
+                life: 25,
+                color: color
+            });
+        }
+    }
+
+    function handleWinLoss() {
+        gameState.isRunning = false;
+        if (player.hp <= 0) {
+            setTimeout(() => document.getElementById('screen-gameover').classList.add('visible'), 1000);
+        } else {
+            if (gameState.levelIndex < LEVELS.length - 1) {
+                gameState.levelIndex++;
+                setTimeout(showLevelScreen, 1500);
+            } else {
+                setTimeout(() => document.getElementById('screen-win').classList.add('visible'), 1000);
+            }
+        }
+    }
+
+    function loop() {
+        if (!gameState.isRunning) {
+            // Static Render when paused/ended
+            ctx.clearRect(0, 0, gameState.width, gameState.height);
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, gameState.height - 50, gameState.width, 50);
+            if(player) player.draw();
+            if(enemy) enemy.draw();
+            if(gameState.isRunning) requestAnimationFrame(loop);
+            return; 
+        }
+
+        ctx.clearRect(0, 0, gameState.width, gameState.height);
+        frameCount++;
+
+        // Floor
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, gameState.height - 50, gameState.width, 50);
+
+        player.update(frameCount, inputL, inputR);
+        
+        const lvl = LEVELS[gameState.levelIndex];
+        const aiInput = enemy.updateAI(player, { aiSpeed: lvl.aiSpeed, aiAggro: lvl.aiAggro });
+        enemy.update(frameCount + 100, aiInput.l, aiInput.r);
+
+        checkCollisions();
+        player.draw();
+        enemy.draw();
+
+        // Particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx; p.y += p.vy; p.life--;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, 4, 4);
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        // Gauges
+        document.getElementById('gauge-l').style.width = (player.windLeft / CONFIG.inputForce * 100) + '%';
+        document.getElementById('gauge-r').style.width = (player.windRight / CONFIG.inputForce * 100) + '%';
+
+        requestAnimationFrame(loop);
+    }
+
+    // --- INPUT ---
+    const zLeft = document.getElementById('zone-left');
+    const zRight = document.getElementById('zone-right');
+
+    function bindZone(el, isLeft) {
+        el.addEventListener('pointerdown', (e) => {
+            el.setPointerCapture(e.pointerId);
+            if(isLeft) inputL = true; else inputR = true;
+        });
+        el.addEventListener('pointerup', (e) => {
+            el.releasePointerCapture(e.pointerId);
+            if(isLeft) inputL = false; else inputR = false;
+        });
+        el.addEventListener('pointercancel', (e) => {
+            if(isLeft) inputL = false; else inputR = false;
+        });
+    }
+    bindZone(zLeft, true);
+    bindZone(zRight, false);
+
+    // KEYBOARD CONTROLS
+    window.addEventListener('keydown', (e) => {
+        if(e.repeat) return;
+        if(e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') inputL = true;
+        if(e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') inputR = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if(e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') inputL = false;
+        if(e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') inputR = false;
+    });
+
+
+    window.addEventListener('resize', () => {
+        gameState.width = window.innerWidth;
+        gameState.height = window.innerHeight;
+        canvas.width = gameState.width;
+        canvas.height = gameState.height;
+    });
+    gameState.width = window.innerWidth;
+    gameState.height = window.innerHeight;
+    canvas.width = gameState.width;
+    canvas.height = gameState.height;
+
+</script>
+</body>
+</html>
+
